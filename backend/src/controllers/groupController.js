@@ -1,14 +1,17 @@
 const Group = require('../models/Group');
 const User = require('../models/User');
+const { getOutstandingBalances } = require('../utils/balances');
 const { AppError } = require('../middleware/errorHandler');
+
+const EPSILON = 0.01;
 
 async function createGroup(req, res, next) {
   try {
     const { name, memberEmails } = req.body;
 
-    // Resolve emails to user ids. Silently skip emails that don't
-    // correspond to a registered user rather than failing the whole
-    // request - the frontend surfaces which ones didn't match.
+    // The creator is always added automatically and becomes the admin
+    // (stored as createdBy). Other emails are resolved to registered users;
+    // unknown emails are reported back instead of failing the request.
     const members = new Set([req.user.id]);
     const unresolved = [];
 
@@ -84,4 +87,36 @@ async function addMember(req, res, next) {
   }
 }
 
-module.exports = { createGroup, listMyGroups, getGroup, addMember };
+/**
+ * A member can leave only when their outstanding balance is zero, so a
+ * debt never gets stranded with someone who can no longer see the group.
+ * The admin (creator) cannot leave. The group and its history stay intact
+ * for the remaining members.
+ */
+async function leaveGroup(req, res, next) {
+  try {
+    const group = await Group.findById(req.params.groupId);
+    if (!group) throw new AppError(404, 'Group not found');
+    if (!group.members.map(String).includes(req.user.id)) {
+      throw new AppError(403, 'You are not a member of this group');
+    }
+    if (group.createdBy.toString() === req.user.id) {
+      throw new AppError(400, 'The group admin cannot leave this group');
+    }
+
+    const balances = await getOutstandingBalances(group._id);
+    const mine = balances.get(req.user.id) || 0;
+    if (Math.abs(mine) > EPSILON) {
+      throw new AppError(409, 'Settle your outstanding balance before leaving this group');
+    }
+
+    group.members.pull(req.user.id);
+    await group.save();
+
+    res.json({ message: 'You left the group' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { createGroup, listMyGroups, getGroup, addMember, leaveGroup };

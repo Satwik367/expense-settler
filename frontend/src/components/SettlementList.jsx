@@ -26,6 +26,8 @@ export default function SettlementList({ settlements, onPaid }) {
         name: 'Expense Settler',
         description: `Settling up with ${order.settlement.payTo}`,
         handler: async (response) => {
+          // The settlement isn't marked "paid" until Razorpay's webhook hits
+          // our backend server-to-server, which may take a few seconds.
           try {
             await api.verifyCallback(response);
           } catch {
@@ -63,7 +65,11 @@ export default function SettlementList({ settlements, onPaid }) {
             <span>₹{s.amount.toFixed(2)}</span>
             {s.from._id === user?._id ? (
               <button onClick={() => pay(s)} disabled={payingId === s._id}>
-                {payingId === s._id ? 'Processing...' : 'Pay now'}
+                {payingId === s._id
+                  ? 'Processing...'
+                  : s.status === 'processing'
+                  ? 'Retry payment'
+                  : 'Pay now'}
               </button>
             ) : (
               <span className="muted">awaiting payment</span>

@@ -147,3 +147,7 @@ ul { list-style: none; padding: 0; }
 }
 
 a { color: #2f6f4f; }
+
+button.danger {
+  background: #b3261e;
+}

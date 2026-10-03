@@ -1,11 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import ExpenseForm from '../components/ExpenseForm';
 import SettlementList from '../components/SettlementList';
 
 export default function GroupDetail() {
   const { groupId } = useParams();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [group, setGroup] = useState(null);
   const [expenses, setExpenses] = useState([]);
   const [settlements, setSettlements] = useState([]);
@@ -13,6 +16,8 @@ export default function GroupDetail() {
   const [error, setError] = useState('');
   const [loadError, setLoadError] = useState('');
   const [computing, setComputing] = useState(false);
+
+  const isAdmin = Boolean(group && user && group.createdBy === user._id);
 
   const loadAll = useCallback(async () => {
     setLoadError('');
@@ -66,6 +71,17 @@ export default function GroupDetail() {
     }
   };
 
+  const onLeave = async () => {
+    if (!window.confirm('Leave this group? You can only leave once you have no outstanding balance.')) return;
+    setError('');
+    try {
+      await api.leaveGroup(groupId);
+      navigate('/');
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   if (loadError) {
     return (
       <div className="page">
@@ -83,7 +99,11 @@ export default function GroupDetail() {
         <div>
           <Link to="/">&larr; All groups</Link>
           <h1>{group.name}</h1>
-          <p className="muted">{group.members.map((m) => m.name).join(', ')}</p>
+          <p className="muted">
+            {group.members
+              .map((m) => (m._id === group.createdBy ? `${m.name} (admin)` : m.name))
+              .join(', ')}
+          </p>
         </div>
       </header>
 
@@ -128,6 +148,26 @@ export default function GroupDetail() {
               </button>
             </div>
             <SettlementList settlements={settlements} onPaid={loadAll} />
+          </div>
+
+          <div className="card">
+            <h3>Leave group</h3>
+            {isAdmin ? (
+              <p className="muted">
+                You created this group, so you're its admin and can't leave it. The group and its
+                history stay as a permanent record.
+              </p>
+            ) : (
+              <>
+                <p className="muted">
+                  You can leave once you have no outstanding balance. The group's history stays for
+                  the other members.
+                </p>
+                <button className="danger" onClick={onLeave}>
+                  Leave group
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

@@ -31,6 +31,7 @@ export const api = {
   createGroup: (payload) => request('/groups', { method: 'POST', body: payload }),
   getGroup: (groupId) => request(`/groups/${groupId}`),
   addMember: (groupId, email) => request(`/groups/${groupId}/members`, { method: 'POST', body: { email } }),
+  leaveGroup: (groupId) => request(`/groups/${groupId}/leave`, { method: 'POST' }),
 
   listExpenses: (groupId) => request(`/groups/${groupId}/expenses`),
   createExpense: (groupId, payload) => request(`/groups/${groupId}/expenses`, { method: 'POST', body: payload }),

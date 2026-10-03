@@ -78,7 +78,8 @@ export default function Dashboard() {
             <input value={name} onChange={(e) => setName(e.target.value)} required />
           </label>
           <label>
-            Flatmates' emails (comma separated, must already be registered)
+            Other members' emails (comma separated, must already be registered). You're added
+            automatically as the group admin.
             <input
               value={emails}
               onChange={(e) => setEmails(e.target.value)}
