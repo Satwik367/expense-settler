@@ -37,12 +37,10 @@ const settlementSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
-    // Populated once the webhook confirms payment
+    // Populated once the webhook confirms payment. No default on purpose:
+    // the field stays absent until a real payment id exists.
     razorpayPaymentId: {
       type: String,
-      default: null,
-      unique: true,
-      sparse: true, // allows many nulls, but no two settlements can share a real payment id
     },
     paidAt: {
       type: Date,
@@ -59,5 +57,16 @@ const settlementSchema = new mongoose.Schema(
 );
 
 settlementSchema.index({ group: 1, status: 1 });
+
+// Unique only when a real payment id exists. A partial index is more
+// reliable than sparse: it ignores null/missing values entirely, while
+// still guaranteeing no two settlements share one real payment id.
+settlementSchema.index(
+  { razorpayPaymentId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { razorpayPaymentId: { $type: 'string' } },
+  }
+);
 
 module.exports = mongoose.model('Settlement', settlementSchema);
