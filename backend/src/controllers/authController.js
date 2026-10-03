@@ -14,13 +14,12 @@ function issueToken(res, userId) {
   const isProd = process.env.NODE_ENV === 'production';
 
   res.cookie(cookieName, token, {
-    httpOnly: true,
-    secure: isProd, // required for sameSite: 'none' to work - cookie only sent over HTTPS
+    httpOnly: true, // never accessible to client-side JS - blocks XSS token theft
+    secure: isProd, // required for sameSite: 'none' - cookie only sent over HTTPS
     // 'none' is required for cross-origin cookies (frontend and backend on
-    // different domains once deployed) - browsers won't send a 'lax' or
-    // 'strict' cookie on a cross-site fetch call, only on top-level navigation.
-    // Locally, frontend and backend are both on localhost so 'lax' still
-    // works fine there - this only changes behavior in production.
+    // different domains once deployed). Browsers won't attach a 'lax' or
+    // 'strict' cookie to a cross-site fetch call. Locally, both run on
+    // localhost so 'lax' still works fine there.
     sameSite: isProd ? 'none' : 'lax',
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: '/',
@@ -71,7 +70,16 @@ async function login(req, res, next) {
 
 function logout(req, res) {
   const cookieName = process.env.COOKIE_NAME || 'es_token';
-  res.clearCookie(cookieName, { path: '/' });
+  const isProd = process.env.NODE_ENV === 'production';
+
+  // clearCookie must use the same sameSite/secure attributes the cookie was
+  // set with, otherwise browsers may ignore the clear in production.
+  res.clearCookie(cookieName, {
+    path: '/',
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
+  });
   res.json({ message: 'Logged out' });
 }
 
