@@ -2,7 +2,7 @@
 
 A shared expense tracker for flatmates and PGs. Instead of everyone paying everyone back, it collapses all debts into net balances and computes the **minimum number of transactions** needed to settle the group. Settlements can be paid in-app through Razorpay, and the whole stack runs locally with Docker Compose or deployed on Render.
 
-> **Live demo:** `https://<your-frontend>.onrender.com`
+> **Live demo:** `https://expense-settler.onrender.com`
 > The backend runs on a free tier that sleeps after inactivity, so the **first request can take 30 to 60 seconds**. Payments run in Razorpay **Test Mode**, so no real money moves.
 
 ## Features
