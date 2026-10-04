@@ -1,10 +1,10 @@
 # Expense Settler
 
-[![CI](https://github.com/YOUR-USERNAME/YOUR-REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR-USERNAME/YOUR-REPO/actions/workflows/ci.yml)
+[![CI](https://github.com/Satwik367/expense-settler/actions/workflows/ci.yml/badge.svg)](https://github.com/Satwik367/expense-settler/actions/workflows/ci.yml)
 
 A shared expense tracker for flatmates and PGs. Instead of everyone paying everyone back, it collapses all debts into net balances and computes the **minimum number of transactions** needed to settle the group. Debtors pay creditors directly over UPI and the creditor confirms receipt. A Razorpay card flow is included as a test-mode demo. The whole stack runs locally with Docker Compose or deployed on Render, with a GitHub Actions CI/CD pipeline.
 
-> **Live demo:** [Open Expense Settler](https://YOUR-FRONTEND.onrender.com)
+> **Live demo:** [Open Expense Settler](https://expense-settler.onrender.com)
 > The backend runs on a free tier that sleeps after inactivity, so the **first request can take 30 to 60 seconds**. Razorpay runs in **Test Mode**, so no real money moves through the card flow.
 
 ## Features
