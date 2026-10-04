@@ -2,14 +2,17 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import Balance from '../components/Balance';
 
 export default function Dashboard() {
-  const { user, logout } = useAuth();
+  const { user, logout, refresh } = useAuth();
   const [groups, setGroups] = useState([]);
   const [name, setName] = useState('');
   const [emails, setEmails] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [upiId, setUpiId] = useState(user?.upiId || '');
+  const [upiMsg, setUpiMsg] = useState('');
 
   const loadGroups = async () => {
     const { groups } = await api.listGroups();
@@ -41,6 +44,18 @@ export default function Dashboard() {
     }
   };
 
+  const onSaveUpi = async (e) => {
+    e.preventDefault();
+    setUpiMsg('');
+    try {
+      await api.updateProfile({ upiId: upiId.trim() });
+      await refresh();
+      setUpiMsg('Saved');
+    } catch (err) {
+      setUpiMsg(err.details ? err.details.map((d) => d.message).join(', ') : err.message);
+    }
+  };
+
   return (
     <div className="page">
       <header className="topbar">
@@ -64,30 +79,53 @@ export default function Dashboard() {
                 <li key={g._id}>
                   <Link to={`/groups/${g._id}`}>{g.name}</Link>
                   <span className="muted"> · {g.members.length} members</span>
+                  <div>
+                    <Balance amount={g.myBalance} you />
+                  </div>
                 </li>
               ))}
             </ul>
           )}
         </div>
 
-        <form onSubmit={onCreate} className="card">
-          <h3>Create a group</h3>
-          {error && <p className="error">{error}</p>}
-          <label>
-            Group name
-            <input value={name} onChange={(e) => setName(e.target.value)} required />
-          </label>
-          <label>
-            Other members' emails (comma separated, must already be registered). You're added
-            automatically as the group admin.
-            <input
-              value={emails}
-              onChange={(e) => setEmails(e.target.value)}
-              placeholder="raj@example.com, priya@example.com"
-            />
-          </label>
-          <button type="submit">Create group</button>
-        </form>
+        <div>
+          <form onSubmit={onCreate} className="card">
+            <h3>Create a group</h3>
+            {error && <p className="error">{error}</p>}
+            <label>
+              Group name
+              <input value={name} onChange={(e) => setName(e.target.value)} required />
+            </label>
+            <label>
+              Other members' emails (comma separated, must already be registered). You're added
+              automatically as the group admin.
+              <input
+                value={emails}
+                onChange={(e) => setEmails(e.target.value)}
+                placeholder="raj@example.com, priya@example.com"
+              />
+            </label>
+            <button type="submit">Create group</button>
+          </form>
+
+          <form onSubmit={onSaveUpi} className="card">
+            <h3>Your UPI ID</h3>
+            <p className="muted">
+              Flatmates who owe you will see this so they can pay you directly. It is only shown to
+              the person who has to pay you.
+            </p>
+            <label>
+              UPI ID
+              <input
+                value={upiId}
+                onChange={(e) => setUpiId(e.target.value)}
+                placeholder="name@bank"
+              />
+            </label>
+            <button type="submit">Save</button>
+            {upiMsg && <p className={upiMsg === 'Saved' ? 'positive' : 'error'}>{upiMsg}</p>}
+          </form>
+        </div>
       </div>
     </div>
   );

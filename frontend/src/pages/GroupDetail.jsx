@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import ExpenseForm from '../components/ExpenseForm';
 import SettlementList from '../components/SettlementList';
+import Balance from '../components/Balance';
 
 export default function GroupDetail() {
   const { groupId } = useParams();
@@ -12,24 +13,29 @@ export default function GroupDetail() {
   const [group, setGroup] = useState(null);
   const [expenses, setExpenses] = useState([]);
   const [settlements, setSettlements] = useState([]);
+  const [balances, setBalances] = useState([]);
+  const [editing, setEditing] = useState(null);
   const [memberEmail, setMemberEmail] = useState('');
   const [error, setError] = useState('');
   const [loadError, setLoadError] = useState('');
-  const [computing, setComputing] = useState(false);
 
   const isAdmin = Boolean(group && user && group.createdBy === user._id);
+  const canModify = (e) => isAdmin || e.createdBy === user?._id;
+  const wasEdited = (e) => new Date(e.updatedAt) - new Date(e.createdAt) > 1000;
 
   const loadAll = useCallback(async () => {
     setLoadError('');
     try {
-      const [{ group }, { expenses }, { settlements }] = await Promise.all([
+      const [{ group }, { expenses }, { settlements }, { balances }] = await Promise.all([
         api.getGroup(groupId),
         api.listExpenses(groupId),
         api.listSettlements(groupId),
+        api.getBalances(groupId),
       ]);
       setGroup(group);
       setExpenses(expenses);
       setSettlements(settlements);
+      setBalances(balances);
     } catch (err) {
       setLoadError(err.message);
     }
@@ -39,23 +45,28 @@ export default function GroupDetail() {
     loadAll();
   }, [loadAll]);
 
+  // The backend recomputes settlements after every expense change,
+  // so reloading everything is all that's needed here.
   const onAddExpense = async (payload) => {
     await api.createExpense(groupId, payload);
-    const { expenses } = await api.listExpenses(groupId);
-    setExpenses(expenses);
+    await loadAll();
   };
 
-  const onCompute = async () => {
-    setComputing(true);
+  const onUpdateExpense = async (payload) => {
+    await api.updateExpense(groupId, editing._id, payload);
+    setEditing(null);
+    await loadAll();
+  };
+
+  const onDeleteExpense = async (expense) => {
+    if (!window.confirm(`Delete "${expense.description}"? Balances will be recalculated.`)) return;
     setError('');
     try {
-      await api.computeSettlements(groupId);
-      const { settlements } = await api.listSettlements(groupId);
-      setSettlements(settlements);
+      await api.deleteExpense(groupId, expense._id);
+      if (editing && editing._id === expense._id) setEditing(null);
+      await loadAll();
     } catch (err) {
       setError(err.message);
-    } finally {
-      setComputing(false);
     }
   };
 
@@ -111,7 +122,13 @@ export default function GroupDetail() {
 
       <div className="grid">
         <div>
-          <ExpenseForm members={group.members} onSubmit={onAddExpense} />
+          <ExpenseForm
+            key={editing ? editing._id : 'new'}
+            members={group.members}
+            initial={editing || undefined}
+            onSubmit={editing ? onUpdateExpense : onAddExpense}
+            onCancel={editing ? () => setEditing(null) : undefined}
+          />
 
           <form onSubmit={onAddMember} className="card">
             <h3>Add a flatmate</h3>
@@ -125,6 +142,23 @@ export default function GroupDetail() {
 
         <div>
           <div className="card">
+            <h3>Balances</h3>
+            <ul>
+              {balances.map((b) => (
+                <li key={b.user._id} className="balance-row">
+                  <strong>{b.user.name}</strong>
+                  <Balance amount={b.amount} />
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="card">
+            <h3>Settlements</h3>
+            <SettlementList groupId={groupId} settlements={settlements} onChange={loadAll} />
+          </div>
+
+          <div className="card">
             <h3>Expenses</h3>
             {expenses.length === 0 ? (
               <p className="muted">No expenses logged yet.</p>
@@ -132,22 +166,27 @@ export default function GroupDetail() {
               <ul className="expense-list">
                 {expenses.map((e) => (
                   <li key={e._id}>
-                    <strong>{e.description}</strong> — ₹{e.amount.toFixed(2)} paid by {e.paidBy.name}
-                    <span className="muted"> ({e.splitType} split)</span>
+                    <div>
+                      <strong>{e.description}</strong> — ₹{e.amount.toFixed(2)} paid by {e.paidBy.name}
+                      <span className="muted">
+                        {' '}
+                        ({e.splitType} split{wasEdited(e) ? ', edited' : ''})
+                      </span>
+                    </div>
+                    {canModify(e) && (
+                      <div className="actions">
+                        <button className="link-button" onClick={() => setEditing(e)}>
+                          Edit
+                        </button>
+                        <button className="link-button danger-text" onClick={() => onDeleteExpense(e)}>
+                          Delete
+                        </button>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
             )}
-          </div>
-
-          <div className="card">
-            <div className="card-header">
-              <h3>Settlements</h3>
-              <button onClick={onCompute} disabled={computing}>
-                {computing ? 'Computing...' : 'Recompute settlements'}
-              </button>
-            </div>
-            <SettlementList settlements={settlements} onPaid={loadAll} />
           </div>
 
           <div className="card">

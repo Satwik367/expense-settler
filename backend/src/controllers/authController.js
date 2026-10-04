@@ -93,4 +93,18 @@ async function me(req, res, next) {
   }
 }
 
-module.exports = { register, login, logout, me };
+async function updateProfile(req, res, next) {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { upiId: req.body.upiId || null },
+      { new: true }
+    );
+    if (!user) throw new AppError(404, 'User not found');
+    res.json({ user: user.toJSON() });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { register, login, logout, me , updateProfile };

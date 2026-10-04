@@ -1,6 +1,13 @@
 const express = require('express');
 const { z } = require('zod');
-const { createGroup, listMyGroups, getGroup, addMember } = require('../controllers/groupController');
+const {
+  createGroup,
+  listMyGroups,
+  getGroup,
+  getBalances,
+  addMember,
+  leaveGroup,
+} = require('../controllers/groupController');
 const { validateBody } = require('../middleware/validate');
 const { requireAuth } = require('../middleware/auth');
 
@@ -20,6 +27,8 @@ const addMemberSchema = z.object({
 router.post('/', validateBody(createGroupSchema), createGroup);
 router.get('/', listMyGroups);
 router.get('/:groupId', getGroup);
+router.get('/:groupId/balances', getBalances);
 router.post('/:groupId/members', validateBody(addMemberSchema), addMember);
+router.post('/:groupId/leave', leaveGroup);
 
 module.exports = router;

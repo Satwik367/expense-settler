@@ -6,13 +6,15 @@ const { computeNetBalances } = require('./settlementAlgorithm');
  * Net outstanding balance per user for a group.
  * Positive = is still owed money. Negative = still owes money.
  *
- * Starts from what the expenses imply, then treats every PAID settlement
- * as a real transfer: the payer owes less, the receiver is owed less.
- * Both recompute and the leave check use this, so "settled" has
- * exactly one definition.
+ * Starts from the (non-deleted) expenses, then treats PAID settlements as
+ * real transfers. With countAwaiting, settlements the debtor has reported
+ * but the creditor hasn't confirmed yet also count - used when recomputing
+ * the settlement list so the same debt isn't listed twice. Leave checks and
+ * the balances view leave it off, so nothing looks settled before the
+ * creditor confirms.
  */
-async function getOutstandingBalances(groupId) {
-  const expenses = await Expense.find({ group: groupId });
+async function getOutstandingBalances(groupId, { countAwaiting = false } = {}) {
+  const expenses = await Expense.find({ group: groupId, deletedAt: null });
 
   const normalized = expenses.map((e) => ({
     amount: e.amount,
@@ -25,8 +27,9 @@ async function getOutstandingBalances(groupId) {
 
   const balances = computeNetBalances(normalized);
 
-  const paid = await Settlement.find({ group: groupId, status: 'paid' });
-  for (const s of paid) {
+  const counted = countAwaiting ? ['paid', 'awaiting_confirmation'] : ['paid'];
+  const transfers = await Settlement.find({ group: groupId, status: { $in: counted } });
+  for (const s of transfers) {
     const from = s.from.toString();
     const to = s.to.toString();
     balances.set(from, (balances.get(from) || 0) + s.amount);

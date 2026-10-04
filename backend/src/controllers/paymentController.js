@@ -16,8 +16,9 @@ async function createOrder(req, res, next) {
 
     const settlement = await Settlement.findById(settlementId).populate('from to', 'name email');
     if (!settlement) throw new AppError(404, 'Settlement not found');
-    if (settlement.status === 'paid') throw new AppError(409, 'This settlement is already paid');
-
+    if (!['pending', 'processing'].includes(settlement.status)) {
+    throw new AppError(409, 'This settlement can no longer be paid. Refresh the page and try again.');
+    }
     // Only the debtor can initiate payment for their own debt.
     if (settlement.from._id.toString() !== req.user.id) {
       throw new AppError(403, 'Only the person who owes this amount can initiate payment');

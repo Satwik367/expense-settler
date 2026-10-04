@@ -1,33 +1,39 @@
+const mongoose = require('mongoose');
 const Expense = require('../models/Expense');
 const Group = require('../models/Group');
+const { safeRecompute } = require('../utils/settlementService');
 const { AppError } = require('../middleware/errorHandler');
 
 const EPSILON = 0.01;
+const round2 = (n) => Math.round(n * 100) / 100;
+
+// Rounding can leave shares a cent or two off the total. Put the leftover
+// on the largest share so the shares always add up to the amount exactly.
+function reconcile(shares, amount) {
+  const sum = shares.reduce((s, p) => s + p.share, 0);
+  const diff = round2(amount - sum);
+  if (diff !== 0) {
+    const target = shares.reduce((a, b) => (b.share > a.share ? b : a));
+    target.share = round2(target.share + diff);
+  }
+  return shares;
+}
 
 /**
- * Resolves whatever split shape the client sent into a concrete list
- * of {user, share} amounts that always sum to the expense total.
- * Keeping this resolution server-side (never trusting a client-computed
- * share) is deliberate - a client could otherwise submit an expense
- * where the shares don't add up to the amount, silently corrupting
- * every balance calculation downstream.
+ * Resolves whatever split shape the client sent into concrete {user, share}
+ * amounts that always sum to the expense total. Done server-side so a client
+ * can never submit shares that don't add up.
  */
 function resolveShares({ splitType, amount, participants }) {
   if (splitType === 'equal') {
-    const userIds = participants.map((p) => p.user);
-    const n = userIds.length;
-    const base = Math.floor((amount / n) * 100) / 100;
-    const shares = userIds.map((user) => ({ user, share: base }));
-    // Distribute the leftover paise/cents from rounding onto the first
-    // participant so the total always matches `amount` exactly.
-    const distributed = base * n;
-    const remainder = Math.round((amount - distributed) * 100) / 100;
-    shares[0].share = Math.round((shares[0].share + remainder) * 100) / 100;
-    return shares;
+    const each = Math.floor((amount * 100) / participants.length) / 100;
+    return reconcile(participants.map((p) => ({ user: p.user, share: each })), amount);
   }
 
   if (splitType === 'custom') {
-    // participants already carry explicit `share` amounts - just validate they sum correctly.
+    if (participants.some((p) => typeof p.share !== 'number')) {
+      throw new AppError(400, 'Every participant needs a share amount');
+    }
     const total = participants.reduce((sum, p) => sum + p.share, 0);
     if (Math.abs(total - amount) > EPSILON) {
       throw new AppError(
@@ -35,62 +41,133 @@ function resolveShares({ splitType, amount, participants }) {
         `Custom shares sum to ${total.toFixed(2)} but the expense amount is ${amount.toFixed(2)}`
       );
     }
-    return participants.map((p) => ({ user: p.user, share: Math.round(p.share * 100) / 100 }));
+    return reconcile(participants.map((p) => ({ user: p.user, share: round2(p.share) })), amount);
   }
 
   if (splitType === 'percentage') {
+    if (participants.some((p) => typeof p.percentage !== 'number')) {
+      throw new AppError(400, 'Every participant needs a percentage');
+    }
     const totalPct = participants.reduce((sum, p) => sum + p.percentage, 0);
     if (Math.abs(totalPct - 100) > EPSILON) {
       throw new AppError(400, `Percentages sum to ${totalPct}% but must sum to 100%`);
     }
-    return participants.map((p) => ({
-      user: p.user,
-      share: Math.round(amount * (p.percentage / 100) * 100) / 100,
-    }));
+    return reconcile(
+      participants.map((p) => ({ user: p.user, share: round2((amount * p.percentage) / 100) })),
+      amount
+    );
   }
 
   throw new AppError(400, `Unsupported splitType: ${splitType}`);
 }
 
+async function loadGroupForMember(groupId, userId) {
+  if (!mongoose.isValidObjectId(groupId)) throw new AppError(404, 'Group not found');
+  const group = await Group.findById(groupId);
+  if (!group) throw new AppError(404, 'Group not found');
+  if (!group.members.map(String).includes(userId)) {
+    throw new AppError(403, 'You are not a member of this group');
+  }
+  return group;
+}
+
+async function findActiveExpense(groupId, expenseId) {
+  if (!mongoose.isValidObjectId(expenseId)) throw new AppError(404, 'Expense not found');
+  const expense = await Expense.findOne({ _id: expenseId, group: groupId, deletedAt: null });
+  if (!expense) throw new AppError(404, 'Expense not found');
+  return expense;
+}
+
+// Only whoever added the expense, or the group admin, may change it.
+function assertCanModify(expense, group, userId) {
+  const isCreator = expense.createdBy.toString() === userId;
+  const isAdmin = group.createdBy.toString() === userId;
+  if (!isCreator && !isAdmin) {
+    throw new AppError(403, 'Only the person who added this expense or the group admin can change it');
+  }
+}
+
+// Shared by create and update: validates membership and resolves shares.
+function buildExpenseFields(group, body) {
+  const { description, amount, splitType } = body;
+  const paidBy = body.paidBy.toLowerCase();
+  const participants = body.participants.map((p) => ({ ...p, user: p.user.toLowerCase() }));
+
+  const memberIds = group.members.map(String);
+  if (!memberIds.includes(paidBy)) {
+    throw new AppError(400, 'paidBy must be a member of this group');
+  }
+
+  const ids = participants.map((p) => p.user);
+  if (new Set(ids).size !== ids.length) {
+    throw new AppError(400, 'Each participant can only appear once');
+  }
+  if (ids.some((id) => !memberIds.includes(id))) {
+    throw new AppError(400, 'Every participant must be a member of this group');
+  }
+
+  return {
+    description,
+    amount,
+    paidBy,
+    splitType,
+    participants: resolveShares({ splitType, amount, participants }),
+  };
+}
+
+const populateExpense = (expense) =>
+  expense.populate([
+    { path: 'paidBy', select: 'name email' },
+    { path: 'participants.user', select: 'name email' },
+  ]);
+
 async function createExpense(req, res, next) {
   try {
-    const { groupId } = req.params;
-    const { description, amount, paidBy, splitType, participants } = req.body;
-
-    const group = await Group.findById(groupId);
-    if (!group) throw new AppError(404, 'Group not found');
-
-    const memberIds = group.members.map(String);
-    if (!memberIds.includes(req.user.id)) {
-      throw new AppError(403, 'You are not a member of this group');
-    }
-    if (!memberIds.includes(paidBy)) {
-      throw new AppError(400, 'paidBy must be a member of this group');
-    }
-    for (const p of participants) {
-      if (!memberIds.includes(p.user)) {
-        throw new AppError(400, `Participant ${p.user} is not a member of this group`);
-      }
-    }
-
-    const resolvedParticipants = resolveShares({ splitType, amount, participants });
+    const group = await loadGroupForMember(req.params.groupId, req.user.id);
+    const fields = buildExpenseFields(group, req.body);
 
     const expense = await Expense.create({
-      group: groupId,
-      description,
-      amount,
-      paidBy,
-      splitType,
-      participants: resolvedParticipants,
+      ...fields,
+      group: group._id,
       createdBy: req.user.id,
     });
 
-    const populated = await expense.populate([
-      { path: 'paidBy', select: 'name email' },
-      { path: 'participants.user', select: 'name email' },
-    ]);
+    await safeRecompute(group._id);
+    res.status(201).json({ expense: await populateExpense(expense) });
+  } catch (err) {
+    next(err);
+  }
+}
 
-    res.status(201).json({ expense: populated });
+async function updateExpense(req, res, next) {
+  try {
+    const group = await loadGroupForMember(req.params.groupId, req.user.id);
+    const expense = await findActiveExpense(group._id, req.params.expenseId);
+    assertCanModify(expense, group, req.user.id);
+
+    expense.set(buildExpenseFields(group, req.body));
+    await expense.save();
+
+    await safeRecompute(group._id);
+    res.json({ expense: await populateExpense(expense) });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Soft delete: the record stays for history but no longer counts.
+async function deleteExpense(req, res, next) {
+  try {
+    const group = await loadGroupForMember(req.params.groupId, req.user.id);
+    const expense = await findActiveExpense(group._id, req.params.expenseId);
+    assertCanModify(expense, group, req.user.id);
+
+    expense.deletedAt = new Date();
+    expense.deletedBy = req.user.id;
+    await expense.save();
+
+    await safeRecompute(group._id);
+    res.json({ message: 'Expense deleted' });
   } catch (err) {
     next(err);
   }
@@ -98,22 +175,15 @@ async function createExpense(req, res, next) {
 
 async function listExpenses(req, res, next) {
   try {
-    const { groupId } = req.params;
-    const group = await Group.findById(groupId);
-    if (!group) throw new AppError(404, 'Group not found');
-    if (!group.members.map(String).includes(req.user.id)) {
-      throw new AppError(403, 'You are not a member of this group');
-    }
-
-    const expenses = await Expense.find({ group: groupId })
+    const group = await loadGroupForMember(req.params.groupId, req.user.id);
+    const expenses = await Expense.find({ group: group._id, deletedAt: null })
       .populate('paidBy', 'name email')
       .populate('participants.user', 'name email')
       .sort({ createdAt: -1 });
-
     res.json({ expenses });
   } catch (err) {
     next(err);
   }
 }
 
-module.exports = { createExpense, listExpenses, resolveShares };
+module.exports = { createExpense, updateExpense, deleteExpense, listExpenses, resolveShares };

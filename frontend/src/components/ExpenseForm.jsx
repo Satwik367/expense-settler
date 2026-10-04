@@ -1,13 +1,30 @@
 import { useState } from 'react';
 
-export default function ExpenseForm({ members, onSubmit }) {
-  const [description, setDescription] = useState('');
-  const [amount, setAmount] = useState('');
-  const [paidBy, setPaidBy] = useState(members[0]?._id || '');
-  const [splitType, setSplitType] = useState('equal');
-  const [selected, setSelected] = useState(() => new Set(members.map((m) => m._id)));
-  const [customShares, setCustomShares] = useState({});
-  const [percentages, setPercentages] = useState({});
+export default function ExpenseForm({ members, onSubmit, initial, onCancel }) {
+  const editing = Boolean(initial);
+
+  const [description, setDescription] = useState(initial?.description || '');
+  const [amount, setAmount] = useState(initial ? String(initial.amount) : '');
+  const [paidBy, setPaidBy] = useState(initial ? initial.paidBy._id : members[0]?._id || '');
+  const [splitType, setSplitType] = useState(initial?.splitType || 'equal');
+  const [selected, setSelected] = useState(
+    () => new Set(initial ? initial.participants.map((p) => p.user._id) : members.map((m) => m._id))
+  );
+  const [customShares, setCustomShares] = useState(() =>
+    initial && initial.splitType === 'custom'
+      ? Object.fromEntries(initial.participants.map((p) => [p.user._id, String(p.share)]))
+      : {}
+  );
+  const [percentages, setPercentages] = useState(() =>
+    initial && initial.splitType === 'percentage'
+      ? Object.fromEntries(
+          initial.participants.map((p) => [
+            p.user._id,
+            String(Math.round((p.share / initial.amount) * 1000000) / 10000),
+          ])
+        )
+      : {}
+  );
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -48,10 +65,12 @@ export default function ExpenseForm({ members, onSubmit }) {
         splitType,
         participants: buildParticipants(),
       });
-      setDescription('');
-      setAmount('');
-      setCustomShares({});
-      setPercentages({});
+      if (!editing) {
+        setDescription('');
+        setAmount('');
+        setCustomShares({});
+        setPercentages({});
+      }
     } catch (err) {
       setError(err.details ? err.details.map((d) => d.message).join(', ') : err.message);
     } finally {
@@ -61,7 +80,7 @@ export default function ExpenseForm({ members, onSubmit }) {
 
   return (
     <form onSubmit={onSubmitForm} className="card">
-      <h3>Add expense</h3>
+      <h3>{editing ? 'Edit expense' : 'Add expense'}</h3>
       {error && <p className="error">{error}</p>}
 
       <label>
@@ -71,7 +90,14 @@ export default function ExpenseForm({ members, onSubmit }) {
 
       <label>
         Amount (INR)
-        <input type="number" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+        <input
+          type="number"
+          step="0.01"
+          min="0.01"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          required
+        />
       </label>
 
       <label>
@@ -128,9 +154,16 @@ export default function ExpenseForm({ members, onSubmit }) {
         ))}
       </fieldset>
 
-      <button type="submit" disabled={busy}>
-        {busy ? 'Adding...' : 'Add expense'}
-      </button>
+      <div className="actions">
+        <button type="submit" disabled={busy}>
+          {busy ? 'Saving...' : editing ? 'Save changes' : 'Add expense'}
+        </button>
+        {onCancel && (
+          <button type="button" className="secondary" onClick={onCancel}>
+            Cancel
+          </button>
+        )}
+      </div>
     </form>
   );
 }

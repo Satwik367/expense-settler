@@ -26,18 +26,29 @@ export const api = {
   login: (payload) => request('/auth/login', { method: 'POST', body: payload }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   me: () => request('/auth/me'),
+  updateProfile: (payload) => request('/auth/me', { method: 'PATCH', body: payload }),
 
   listGroups: () => request('/groups'),
   createGroup: (payload) => request('/groups', { method: 'POST', body: payload }),
   getGroup: (groupId) => request(`/groups/${groupId}`),
+  getBalances: (groupId) => request(`/groups/${groupId}/balances`),
   addMember: (groupId, email) => request(`/groups/${groupId}/members`, { method: 'POST', body: { email } }),
   leaveGroup: (groupId) => request(`/groups/${groupId}/leave`, { method: 'POST' }),
 
   listExpenses: (groupId) => request(`/groups/${groupId}/expenses`),
   createExpense: (groupId, payload) => request(`/groups/${groupId}/expenses`, { method: 'POST', body: payload }),
+  updateExpense: (groupId, expenseId, payload) =>
+    request(`/groups/${groupId}/expenses/${expenseId}`, { method: 'PUT', body: payload }),
+  deleteExpense: (groupId, expenseId) =>
+    request(`/groups/${groupId}/expenses/${expenseId}`, { method: 'DELETE' }),
 
-  computeSettlements: (groupId) => request(`/groups/${groupId}/settlements/compute`, { method: 'POST' }),
   listSettlements: (groupId) => request(`/groups/${groupId}/settlements`),
+  reportPayment: (groupId, settlementId) =>
+    request(`/groups/${groupId}/settlements/${settlementId}/report`, { method: 'POST' }),
+  confirmPayment: (groupId, settlementId) =>
+    request(`/groups/${groupId}/settlements/${settlementId}/confirm`, { method: 'POST' }),
+  rejectPayment: (groupId, settlementId) =>
+    request(`/groups/${groupId}/settlements/${settlementId}/reject`, { method: 'POST' }),
 
   createOrder: (settlementId) => request(`/payments/create-order/${settlementId}`, { method: 'POST' }),
   verifyCallback: (payload) => request('/payments/verify-callback', { method: 'POST', body: payload }),

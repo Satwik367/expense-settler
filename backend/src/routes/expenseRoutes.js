@@ -1,6 +1,11 @@
 const express = require('express');
 const { z } = require('zod');
-const { createExpense, listExpenses } = require('../controllers/expenseController');
+const {
+  createExpense,
+  updateExpense,
+  deleteExpense,
+  listExpenses,
+} = require('../controllers/expenseController');
 const { validateBody } = require('../middleware/validate');
 const { requireAuth } = require('../middleware/auth');
 
@@ -10,24 +15,24 @@ router.use(requireAuth);
 
 const objectIdString = z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid id');
 
-// participants shape differs slightly by splitType (custom needs `share`,
-// percentage needs `percentage`, equal needs neither) - keep it loose here
-// and let the controller's resolveShares() do the real validation.
+// share / percentage depend on splitType, so the controller validates those.
 const participantSchema = z.object({
   user: objectIdString,
   share: z.number().min(0).optional(),
   percentage: z.number().min(0).max(100).optional(),
 });
 
-const createExpenseSchema = z.object({
+const expenseSchema = z.object({
   description: z.string().trim().min(1).max(200),
-  amount: z.number().positive(),
+  amount: z.number().positive().max(10000000),
   paidBy: objectIdString,
   splitType: z.enum(['equal', 'custom', 'percentage']),
   participants: z.array(participantSchema).min(1),
 });
 
-router.post('/', validateBody(createExpenseSchema), createExpense);
+router.post('/', validateBody(expenseSchema), createExpense);
 router.get('/', listExpenses);
+router.put('/:expenseId', validateBody(expenseSchema), updateExpense);
+router.delete('/:expenseId', deleteExpense);
 
 module.exports = router;

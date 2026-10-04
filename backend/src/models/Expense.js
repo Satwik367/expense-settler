@@ -2,53 +2,21 @@ const mongoose = require('mongoose');
 
 const participantSchema = new mongoose.Schema(
   {
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true,
-    },
-    // Amount this participant owes towards this expense, in the same
-    // currency unit as `amount`. Always resolved to an absolute value
-    // at write time regardless of splitType, so downstream balance
-    // calculations never need to know how the split was expressed.
-    share: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    // Absolute amount this participant owes, resolved at write time
+    // regardless of splitType.
+    share: { type: Number, required: true, min: 0 },
   },
   { _id: false }
 );
 
 const expenseSchema = new mongoose.Schema(
   {
-    group: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Group',
-      required: true,
-      index: true,
-    },
-    description: {
-      type: String,
-      required: true,
-      trim: true,
-      maxlength: 200,
-    },
-    amount: {
-      type: Number,
-      required: true,
-      min: 0.01,
-    },
-    paidBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true,
-    },
-    splitType: {
-      type: String,
-      enum: ['equal', 'custom', 'percentage'],
-      required: true,
-    },
+    group: { type: mongoose.Schema.Types.ObjectId, ref: 'Group', required: true, index: true },
+    description: { type: String, required: true, trim: true, maxlength: 200 },
+    amount: { type: Number, required: true, min: 0.01 },
+    paidBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    splitType: { type: String, enum: ['equal', 'custom', 'percentage'], required: true },
     participants: {
       type: [participantSchema],
       validate: {
@@ -56,11 +24,12 @@ const expenseSchema = new mongoose.Schema(
         message: 'An expense must have at least one participant',
       },
     },
-    createdBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true,
-    },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    // Soft delete: the record stays for history, but is ignored everywhere.
+    // Queries use { deletedAt: null }, which also matches older documents
+    // that don't have this field.
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true }
 );

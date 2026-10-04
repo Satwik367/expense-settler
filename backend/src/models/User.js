@@ -2,12 +2,7 @@ const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema(
   {
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-      maxlength: 80,
-    },
+    name: { type: String, required: true, trim: true, maxlength: 80 },
     email: {
       type: String,
       required: true,
@@ -21,11 +16,12 @@ const userSchema = new mongoose.Schema(
       required: true,
       select: false, // never returned by default on find()
     },
+    // Where this person receives money. Only shown to a debtor paying them.
+    upiId: { type: String, trim: true, lowercase: true, default: null },
   },
   { timestamps: true }
 );
 
-// toJSON transform so passwordHash never leaks even if select() is misused
 userSchema.set('toJSON', {
   transform: (_doc, ret) => {
     delete ret.passwordHash;

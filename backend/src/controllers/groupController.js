@@ -9,9 +9,7 @@ async function createGroup(req, res, next) {
   try {
     const { name, memberEmails } = req.body;
 
-    // The creator is always added automatically and becomes the admin
-    // (stored as createdBy). Other emails are resolved to registered users;
-    // unknown emails are reported back instead of failing the request.
+    // The creator is added automatically and is the admin (createdBy).
     const members = new Set([req.user.id]);
     const unresolved = [];
 
@@ -37,12 +35,21 @@ async function createGroup(req, res, next) {
   }
 }
 
+// Each group comes with the caller's own outstanding balance.
 async function listMyGroups(req, res, next) {
   try {
     const groups = await Group.find({ members: req.user.id })
       .populate('members', 'name email')
       .sort({ updatedAt: -1 });
-    res.json({ groups });
+
+    const withBalances = await Promise.all(
+      groups.map(async (g) => {
+        const balances = await getOutstandingBalances(g._id);
+        return { ...g.toJSON(), myBalance: balances.get(req.user.id) || 0 };
+      })
+    );
+
+    res.json({ groups: withBalances });
   } catch (err) {
     next(err);
   }
@@ -56,6 +63,27 @@ async function getGroup(req, res, next) {
       throw new AppError(403, 'You are not a member of this group');
     }
     res.json({ group });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Net balance of every current member.
+async function getBalances(req, res, next) {
+  try {
+    const group = await Group.findById(req.params.groupId).populate('members', 'name email');
+    if (!group) throw new AppError(404, 'Group not found');
+    if (!group.members.some((m) => m._id.toString() === req.user.id)) {
+      throw new AppError(403, 'You are not a member of this group');
+    }
+
+    const balances = await getOutstandingBalances(group._id);
+    res.json({
+      balances: group.members.map((m) => ({
+        user: { _id: m._id, name: m.name },
+        amount: balances.get(m._id.toString()) || 0,
+      })),
+    });
   } catch (err) {
     next(err);
   }
@@ -87,12 +115,7 @@ async function addMember(req, res, next) {
   }
 }
 
-/**
- * A member can leave only when their outstanding balance is zero, so a
- * debt never gets stranded with someone who can no longer see the group.
- * The admin (creator) cannot leave. The group and its history stay intact
- * for the remaining members.
- */
+// A member can leave only at a zero balance. The admin cannot leave.
 async function leaveGroup(req, res, next) {
   try {
     const group = await Group.findById(req.params.groupId);
@@ -119,4 +142,4 @@ async function leaveGroup(req, res, next) {
   }
 }
 
-module.exports = { createGroup, listMyGroups, getGroup, addMember, leaveGroup };
+module.exports = { createGroup, listMyGroups, getGroup, getBalances, addMember, leaveGroup };
