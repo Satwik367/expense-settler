@@ -4,7 +4,7 @@ const Settlement = require('../models/Settlement');
 const { recomputeSettlements, safeRecompute } = require('../utils/settlementService');
 const { AppError } = require('../middleware/errorHandler');
 
-const ACTIVE_STATUSES = ['pending', 'processing', 'awaiting_confirmation'];
+const ACTIVE_STATUSES = ['pending', 'awaiting_confirmation']; // changed: 'processing' removed
 
 async function assertMember(groupId, userId) {
   if (!mongoose.isValidObjectId(groupId)) throw new AppError(404, 'Group not found');
@@ -70,7 +70,7 @@ async function reportPayment(req, res, next) {
     if (settlement.from.toString() !== req.user.id) {
       throw new AppError(403, 'Only the person who owes this amount can report a payment');
     }
-    if (!['pending', 'processing'].includes(settlement.status)) {
+    if (settlement.status !== 'pending') { // changed
       throw new AppError(409, 'This settlement can no longer be updated. Refresh the page.');
     }
     settlement.status = 'awaiting_confirmation';
@@ -91,7 +91,7 @@ async function confirmPayment(req, res, next) {
     if (settlement.to.toString() !== req.user.id) {
       throw new AppError(403, 'Only the person who is owed this amount can confirm receipt');
     }
-    if (!['pending', 'processing', 'awaiting_confirmation'].includes(settlement.status)) {
+    if (!['pending', 'awaiting_confirmation'].includes(settlement.status)) { // changed
       throw new AppError(409, 'This settlement can no longer be updated. Refresh the page.');
     }
     settlement.status = 'paid';
