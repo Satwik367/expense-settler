@@ -21,17 +21,16 @@ A shared expense tracker for flatmates and PGs. Instead of everyone paying every
 
 ## Tech stack
 
-| Layer                 | Tech                                                                                               |
-| --------------------- | -------------------------------------------------------------------------------------------------- |
-| Frontend              | React 18, Vite, React Router                                                                       |
-| Backend               | Node.js, Express                                                                                   |
-| Database              | MongoDB (Mongoose)                                                                                 |
-| Cache                 | Redis (ioredis), set up in the config and Docker Compose but not used by any feature at the moment |
-| Payments              | UPI deep links + manual confirmation                                                               |
-| Validation / security | Zod, bcryptjs, JWT, helmet, express-rate-limit                                                     |
-| Containers            | Docker, Docker Compose, nginx                                                                      |
-| CI/CD                 | GitHub Actions, Render auto-deploy gated on CI                                                     |
-| Hosting               | Render (backend + static frontend), MongoDB Atlas, Upstash Redis                                   |
+| Layer                 | Tech                                              |
+| --------------------- | ------------------------------------------------- |
+| Frontend              | React 18, Vite, React Router                      |
+| Backend               | Node.js, Express                                  |
+| Database              | MongoDB (Mongoose)                                |
+| Payments              | UPI deep links + manual confirmation              |
+| Validation / security | Zod, bcryptjs, JWT, helmet, express-rate-limit    |
+| Containers            | Docker, Docker Compose, nginx                     |
+| CI/CD                 | GitHub Actions, Render auto-deploy gated on CI    |
+| Hosting               | Render (backend + static frontend), MongoDB Atlas |
 
 ## How the settlement algorithm works
 
@@ -99,7 +98,7 @@ expense-settler/
 ├── .github/workflows/ci.yml
 ├── backend/
 │   ├── src/
-│   │   ├── config/        db.js, redis.js
+│   │   ├── config/        db.js
 │   │   ├── models/        User, Group, Expense, Settlement
 │   │   ├── controllers/   auth, group, expense, settlement
 │   │   ├── routes/        Express routers + Zod schemas
@@ -159,15 +158,14 @@ docker compose up --build
 - Frontend: http://localhost:5173
 - Backend: http://localhost:5000/api/health
 
-Compose overrides `MONGO_URI` and `REDIS_URL` to point at the `mongo` and `redis` service names, so the values in `.env` don't matter for this option. Data persists in named volumes. Run `docker compose down -v` to wipe it.
+Compose overrides `MONGO_URI` to point at the `mongo` service name, so the values in `.env` don't matter for this option. Data persists in named volumes. Run `docker compose down -v` to wipe it.
 
 ### Option B: Run the apps directly
 
-Start MongoDB and Redis in containers, then run the backend and frontend with npm:
+Start MongoDB in a container, then run the backend and frontend with npm:
 
 ```bash
 docker run -d --name es-mongo -p 27017:27017 mongo:7
-docker run -d --name es-redis -p 6379:6379 redis:7-alpine
 
 cd backend && npm install && npm run dev
 cd frontend && npm install && npm run dev
@@ -177,7 +175,6 @@ In `backend/.env`, set:
 
 ```
 MONGO_URI=mongodb://localhost:27017/expense_settler
-REDIS_URL=redis://localhost:6379
 ```
 
 ### Testing with two users
@@ -191,7 +188,7 @@ cd backend
 npm test
 ```
 
-The algorithm tests need no database or Redis.
+The algorithm tests need no database.
 
 ## Environment variables (backend)
 
@@ -201,7 +198,6 @@ The algorithm tests need no database or Redis.
 | `NODE_ENV`            | `production` enables `Secure` / `SameSite=None` cookies and hides stack traces                                  |
 | `FRONTEND_ORIGIN`     | Exact frontend URL for CORS, with no trailing slash                                                             |
 | `MONGO_URI`           | MongoDB connection string. **Include the database name** (`.../expense_settler`), otherwise MongoDB uses `test` |
-| `REDIS_URL`           | Redis connection string (`rediss://` for Upstash)                                                               |
 | `JWT_SECRET`          | Long random string. Use a different one in production                                                           |
 | `JWT_EXPIRES_IN`      | Session length (default `7d`)                                                                                   |
 | `COOKIE_NAME`         | Session cookie name (default `es_token`)                                                                        |
@@ -209,14 +205,13 @@ The algorithm tests need no database or Redis.
 
 Frontend build variable: `VITE_API_BASE` is the backend URL ending in `/api`. Vite bakes it in at build time, so changing it requires a rebuild.
 
-## Deployment (Render + Atlas + Upstash)
+## Deployment (Render + Atlas)
 
 1. **MongoDB Atlas.** Create a free cluster and a database user. Allow `0.0.0.0/0` in Network Access (Render's free tier has no fixed IP), so use a long random database password. Put the database name in the URI.
-2. **Upstash Redis.** Create a database and copy the `rediss://` URL.
-3. **Backend: Render Web Service.** Root directory `backend`, Docker environment, with all environment variables above set.
-4. **Frontend: Render Static Site.** Root `frontend`, build command `npm install && npm run build`, publish directory `dist`, `VITE_API_BASE` set. Add a rewrite rule `/*` to `/index.html` so refreshing on `/groups/...` doesn't 404.
-5. Set the backend's `FRONTEND_ORIGIN` to the frontend's real URL.
-6. On both services, set **Auto-Deploy** to "After CI Checks Pass" so only green commits are deployed.
+2. **Backend: Render Web Service.** Root directory `backend`, Docker environment, with all environment variables above set.
+3. **Frontend: Render Static Site.** Root `frontend`, build command `npm install && npm run build`, publish directory `dist`, `VITE_API_BASE` set. Add a rewrite rule `/*` to `/index.html` so refreshing on `/groups/...` doesn't 404.
+4. Set the backend's `FRONTEND_ORIGIN` to the frontend's real URL.
+5. On both services, set **Auto-Deploy** to "After CI Checks Pass" so only green commits are deployed.
 
 ### Lessons learned while deploying
 
@@ -237,4 +232,4 @@ Frontend build variable: `VITE_API_BASE` is the backend URL ending in `/api`. Vi
 - Groups can't be deleted, by design, so the payment history is preserved
 - Currency is fixed to INR
 - CI covers unit tests, a dependency audit and builds, but there are no API integration tests yet
-- Ideas: integration tests with Mongo and Redis service containers in CI, admin transfer on leave, invite links, a mobile app (PWA or Capacitor), and deployment on AWS with Kubernetes
+- Ideas: integration tests with a Mongo service container in CI, admin transfer on leave, invite links, a mobile app (PWA or Capacitor), and deployment on AWS with Kubernetes

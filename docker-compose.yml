@@ -12,17 +12,6 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   backend:
     build:
       context: ./backend
@@ -30,17 +19,13 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      # These two override whatever's in .env - they must point at the
-      # compose service names, not localhost, since containers reach
-      # each other by service name on the compose network.
+      # Overrides .env - must point at the compose service name, not
+      # localhost, since containers reach each other by service name.
       MONGO_URI: mongodb://mongo:27017/expense_settler
-      REDIS_URL: redis://redis:6379
     ports:
       - "5000:5000"
     depends_on:
       mongo:
-        condition: service_healthy
-      redis:
         condition: service_healthy
 
   frontend:
@@ -56,4 +41,3 @@ services:
 
 volumes:
   mongo_data:
-  redis_data:
