@@ -17,7 +17,7 @@ async function recomputeSettlements(groupId) {
 
   const active = await Settlement.find({
     group: groupId,
-    status: { $in: ['pending', 'processing'] },
+    status: 'pending', // changed: was { $in: ['pending', 'processing'] }
   });
 
   const reusable = new Map();

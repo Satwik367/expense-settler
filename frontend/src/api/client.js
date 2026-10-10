@@ -49,7 +49,4 @@ export const api = {
     request(`/groups/${groupId}/settlements/${settlementId}/confirm`, { method: 'POST' }),
   rejectPayment: (groupId, settlementId) =>
     request(`/groups/${groupId}/settlements/${settlementId}/reject`, { method: 'POST' }),
-
-  createOrder: (settlementId) => request(`/payments/create-order/${settlementId}`, { method: 'POST' }),
-  verifyCallback: (payload) => request('/payments/verify-callback', { method: 'POST', body: payload }),
 };

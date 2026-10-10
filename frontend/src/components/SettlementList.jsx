@@ -27,34 +27,6 @@ export default function SettlementList({ groupId, settlements, onChange }) {
     }
   };
 
-  // Secondary option: Razorpay test-mode card checkout (demo only).
-  const payByCard = (s) =>
-    run(s._id, async () => {
-      const order = await api.createOrder(s._id);
-      if (!window.Razorpay) {
-        throw new Error('Razorpay checkout script did not load. Check your network/adblocker.');
-      }
-      const rzp = new window.Razorpay({
-        key: order.keyId,
-        amount: order.amount,
-        currency: order.currency,
-        order_id: order.orderId,
-        name: 'Expense Settler',
-        description: `Settling up with ${order.settlement.payTo}`,
-        handler: async (response) => {
-          try {
-            await api.verifyCallback(response);
-          } catch {
-            // non-fatal - the webhook is the source of truth
-          }
-          onChange?.();
-        },
-        modal: { ondismiss: () => setBusyId(null) },
-        theme: { color: '#2f6f4f' },
-      });
-      rzp.open();
-    });
-
   if (settlements.length === 0) {
     return <p className="muted">Everyone is settled up.</p>;
   }
@@ -89,7 +61,6 @@ export default function SettlementList({ groupId, settlements, onChange }) {
                     : 'Payment reported, awaiting confirmation.'}
                 </p>
               )}
-              {s.status === 'processing' && <p className="muted">Card payment started.</p>}
 
               {iAmDebtor && !awaiting && (
                 <div className="actions">
@@ -108,9 +79,6 @@ export default function SettlementList({ groupId, settlements, onChange }) {
                     onClick={() => run(s._id, () => api.reportPayment(groupId, s._id))}
                   >
                     I've paid
-                  </button>
-                  <button className="secondary" disabled={busy} onClick={() => payByCard(s)}>
-                    Pay by card (test mode)
                   </button>
                 </div>
               )}

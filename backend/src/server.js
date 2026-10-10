@@ -8,13 +8,11 @@ const morgan = require('morgan');
 const connectDB = require('./config/db');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { generalLimiter } = require('./middleware/rateLimiter');
-const { handleWebhook } = require('./controllers/paymentController');
 
 const authRoutes = require('./routes/authRoutes');
 const groupRoutes = require('./routes/groupRoutes');
 const expenseRoutes = require('./routes/expenseRoutes');
 const settlementRoutes = require('./routes/settlementRoutes');
-const paymentRoutes = require('./routes/paymentRoutes');
 
 const app = express();
 
@@ -33,13 +31,7 @@ app.use(
 
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-// --- Razorpay webhook: MUST be registered with a raw body parser BEFORE
-// the global express.json() below. Signature verification needs the
-// exact bytes Razorpay signed - once express.json() re-serializes the
-// body into a JS object, that byte-for-byte fidelity is gone. ---
-app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), handleWebhook);
-
-// --- Standard parsers for every other route ---
+// --- Standard parsers ---
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
 
@@ -51,7 +43,6 @@ app.use('/api/auth', authRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/groups/:groupId/expenses', expenseRoutes);
 app.use('/api/groups/:groupId/settlements', settlementRoutes);
-app.use('/api/payments', paymentRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
